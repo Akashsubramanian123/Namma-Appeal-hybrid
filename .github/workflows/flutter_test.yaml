@@ -1,0 +1,60 @@
+name: Flutter CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java (Required for Flutter)
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - name: Create Complex Secrets File
+        run: |
+          cat << 'EOF' > lib/secrets.dart
+          class Secrets {
+            static const supabaseUrl = "${{ secrets.SUPABASE_URL }}";
+            static const supabaseAnonKey = "${{ secrets.SUPABASE_ANON_KEY }}";
+            static const String groqApiKey = "${{ secrets.GROQ_API_KEY }}";
+            static const openRouterKey = "${{ secrets.OPEN_ROUTER_KEY }}";
+            static const String webClientId = "${{ secrets.WEB_CLIENT_ID }}";
+            
+            static const List<String> _geminiApiKeys = [
+              "${{ secrets.GEMINI_KEY_1 }}",
+              "${{ secrets.GEMINI_KEY_2 }}",
+              "${{ secrets.GEMINI_KEY_3 }}",
+              "${{ secrets.GEMINI_KEY_4 }}",
+            ];
+            
+            static int _currentIndex = 0;
+            
+            static String get geminiApiKey {
+              if (_geminiApiKeys.isEmpty) return '';
+              final key = _geminiApiKeys[_currentIndex];
+              _currentIndex = (_currentIndex + 1) % _geminiApiKeys.length;
+              return key;
+            }
+          }
+          EOF
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run automated tests
+        run: flutter test

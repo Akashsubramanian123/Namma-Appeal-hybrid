@@ -1,30 +1,27 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:swa_shasan/main.dart';
+// Import your isolated legal screen
+import 'package:namma_appeal/legal_screen.dart'; // Adjust 'namma_appeal' if your pubspec.yaml name is different
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('LegalScreen renders privacy policy and terms correctly', (WidgetTester tester) async {
+    // 1. Pump the isolated widget into the test environment
+    await tester.pumpWidget(const MaterialApp(
+      home: LegalScreen(),
+    ));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // 2. Wait for the Markdown to finish rendering
+    await tester.pumpAndSettle();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // 3. Assert that the AppBar title exists
+    expect(find.text('Privacy & Terms'), findsOneWidget);
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // 4. Assert that the Markdown Body parsed the headers correctly
+    expect(find.textContaining('Privacy Policy'), findsWidgets);
+    expect(find.textContaining('Terms of Service'), findsWidgets);
+    
+    // 5. Assert that the back button is present
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
   });
 }
