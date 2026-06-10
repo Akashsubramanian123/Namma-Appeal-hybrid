@@ -44,3 +44,26 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 lib/secrets.dart 
+# ==========================================
+# EXTRA PRODUCTION SAFEGUARDS
+# ==========================================
+
+# Android Release Signing (CRITICAL: Never upload your app signature keys!)
+*.jks
+*.keystore
+key.properties
+android/key.properties
+
+# iOS/macOS CocoaPods dependencies (These get auto-generated, no need to upload them)
+**/ios/Pods/
+**/macos/Pods/
+.symlinks/
+
+# Desktop ephemeral build files
+**/windows/flutter/ephemeral/
+**/linux/flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
+# Environment variables (Just in case you use .env files later)
+.env
+.env.*
