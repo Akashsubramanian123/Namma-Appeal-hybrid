@@ -60,11 +60,15 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(24),
-                child: Image.asset(
-                  'assets/page_icon_custom.png',
-                  width: 120,
-                  height: 120,
-                  fit: BoxFit.cover,
+                child: Semantics(
+                  label: 'App Logo',
+                  image: true,
+                  child: Image.asset(
+                    'assets/page_icon_custom.png',
+                    width: 120,
+                    height: 120,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
@@ -234,7 +238,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               color: navy.withOpacity(0.06),
               border: Border.all(color: saffron.withOpacity(0.35), width: 2),
             ),
-            child: Icon(icon, size: 72, color: navy),
+            child: Semantics(
+              label: 'Onboarding Graphic',
+              image: true,
+              child: Icon(icon, size: 72, color: navy),
+            ),
           ),
           const SizedBox(height: 40),
           Text(

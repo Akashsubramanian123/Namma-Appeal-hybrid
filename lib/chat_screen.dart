@@ -560,6 +560,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 CircleAvatar(
                   backgroundColor: themeColor,
                   child: IconButton(
+                    tooltip: 'Send Message',
                     icon: Icon(
                       _isStreaming ? Icons.hourglass_empty : Icons.send,
                       color: Colors.white,

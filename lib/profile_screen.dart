@@ -195,6 +195,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 prefixIcon: Icon(Icons.phone_outlined),
               ),
               keyboardType: TextInputType.phone,
+              validator: (value) {
+                if (value != null && value.isNotEmpty && value.length != 10) {
+                  return 'Please enter a valid 10-digit mobile number';
+                }
+                return null;
+              },
             ),
             const SizedBox(height: 14),
 

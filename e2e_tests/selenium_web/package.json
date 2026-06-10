@@ -1,0 +1,12 @@
+{
+  "name": "namma-appeal-web-e2e",
+  "version": "1.0.0",
+  "description": "Selenium Web End-to-End Automated Testing Suite in Node.js",
+  "main": "test_selenium_e2e.js",
+  "dependencies": {
+    "selenium-webdriver": "^4.15.0"
+  },
+  "scripts": {
+    "test": "node test_selenium_e2e.js"
+  }
+}
