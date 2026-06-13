@@ -437,6 +437,7 @@ class _NewRtiScreenState extends State<NewRtiScreen> {
     });
 
     try {
+      final String endpoint = 'https://api.groq.com/openai/v1/chat/completions';
       
       final Map<String, dynamic> requestBody = {
         "model": _selectedImageBytes != null 
@@ -465,19 +466,20 @@ class _NewRtiScreenState extends State<NewRtiScreen> {
         "temperature": 0.3,
       };
 
-      // Call your secure Supabase Edge Function instead of Groq directly
-      final response = await Supabase.instance.client.functions.invoke(
-        'groq-api',
-        body: {'requestBody': requestBody},
+      final response = await http.post(
+        Uri.parse(endpoint),
+        headers: {
+          'Authorization': 'Bearer ${Secrets.groqApiKey}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode(requestBody),
       );
 
-      // Check for errors from the Edge Function
-      if (response.status != 200) {
-        throw Exception("Groq Edge Function Error: ${response.data}");
+      if (response.statusCode != 200) {
+        throw Exception("Groq API Error: ${response.body}");
       }
 
-      // Supabase automatically parses the JSON, so response.data is already a Map!
-      final responseData = response.data;
+      final responseData = jsonDecode(response.body);
       final finalDraft = responseData['choices'][0]['message']['content'];
 
       String generatedId = "";
