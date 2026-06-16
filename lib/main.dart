@@ -437,28 +437,19 @@ class _NewRtiScreenState extends State<NewRtiScreen> {
     });
 
     try {
-      final String endpoint = 'https://api.groq.com/openai/v1/chat/completions';
-      
+      // 1. Prepare the payload
       final Map<String, dynamic> requestBody = {
         "model": _selectedImageBytes != null 
             ? "meta-llama/llama-4-scout-17b-16e-instruct" 
             : "llama-3.3-70b-versatile",
         "messages": [
-          {
-            "role": "system",
-            "content": systemInstructions
-          },
+          {"role": "system", "content": systemInstructions},
           {
             "role": "user",
             "content": _selectedImageBytes != null
                 ? [
                     {"type": "text", "text": userContent},
-                    {
-                      "type": "image_url",
-                      "image_url": {
-                        "url": "data:image/jpeg;base64,${base64Encode(_selectedImageBytes!)}"
-                      }
-                    }
+                    {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,${base64Encode(_selectedImageBytes!)}"}}
                   ]
                 : userContent
           }
@@ -466,21 +457,18 @@ class _NewRtiScreenState extends State<NewRtiScreen> {
         "temperature": 0.3,
       };
 
-      final response = await http.post(
-        Uri.parse(endpoint),
-        headers: {
-          'Authorization': 'Bearer ${Secrets.groqApiKey}',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(requestBody),
+      // 2. Call the secure Edge Function instead of Groq
+      final response = await Supabase.instance.client.functions.invoke(
+        'groq-api',
+        body: {'requestBody': requestBody},
       );
 
-      if (response.statusCode != 200) {
-        throw Exception("Groq API Error: ${response.body}");
+      if (response.status != 200) {
+        throw Exception("Groq Edge Function Error: ${response.data}");
       }
 
-      final responseData = jsonDecode(response.body);
-      final finalDraft = responseData['choices'][0]['message']['content'];
+      // 3. Supabase automatically parses JSON into a Dart Map
+      final finalDraft = response.data['choices'][0]['message']['content'];
 
       String generatedId = "";
       try {
@@ -807,14 +795,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
       try {
         final imageBytes = await photo.readAsBytes();
         final base64Image = base64Encode(imageBytes);
-        final endpoint = Uri.parse('https://api.groq.com/openai/v1/chat/completions');
-        final headers = {
-          'Authorization': 'Bearer ${Secrets.groqApiKey}',
-          'Content-Type': 'application/json',
-        };
-
-        // 1. First Call: Identify Topic
-        final topicResponse = await http.post(endpoint, headers: headers, body: jsonEncode({
+        // 1. First Call: Identify Topic via Edge Function
+        final topicRequestBody = {
           "model": "meta-llama/llama-4-scout-17b-16e-instruct",
           "messages": [{
             "role": "user",
@@ -823,13 +805,19 @@ class _ScannerScreenState extends State<ScannerScreen> {
               {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,$base64Image"}}
             ]
           }]
-        }));
+        };
+
+        final topicResponse = await Supabase.instance.client.functions.invoke(
+          'groq-api',
+          body: {'requestBody': topicRequestBody},
+        );
         
         String topic = "General";
-        if (topicResponse.statusCode == 200) {
-          topic = jsonDecode(topicResponse.body)['choices'][0]['message']['content'].trim();
+        if (topicResponse.status == 200) {
+          topic = topicResponse.data['choices'][0]['message']['content'].trim();
         }
 
+        // --- Fetch laws from database based on topic ---
         final response = await Supabase.instance.client
             .from('rti_laws')
             .select('content')
@@ -860,7 +848,6 @@ class _ScannerScreenState extends State<ScannerScreen> {
           "You are Namma-Appeal AI, a constitutional law and RTI activist expert. Analyze the user's letter using this legal context:\n$lawContext\n\n"
           "1. Start with a clean, Markdown-formatted analysis overview: 'As Namma-Appeal AI, I have analyzed your letter...'\n"
           "2. Provide 3 specific legal bullet points explaining why the rejection violates the provisions of the RTI Act, 2005.\n"
-          // --- UPDATED INSTRUCTION BELOW ---
           "3. You MUST insert this EXACT marker as a separator between the analysis and the letter: [DRAFT_START]\n"
           "4. Below the separator, write a complete, structurally sound formal First Appeal letter under Section 19(1) of the RTI Act.\n\n"
           "CRITICAL FORMATTING INSTRUCTION: For the draft below the separator, write a continuous formal letter. DO NOT use bold headers or asterisks.\n\n"
@@ -871,14 +858,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
         String userContent = "Please analyze the attached rejection order.$profileBlock";
 
-        // 2. Second Call: Full Analysis 
-        final analysisResponse = await http.post(endpoint, headers: headers, body: jsonEncode({
+        // 2. Second Call: Full Analysis via Edge Function
+        final analysisRequestBody = {
           "model": "meta-llama/llama-4-scout-17b-16e-instruct",
           "messages": [
-            {
-              "role": "system",
-              "content": systemInstructions
-            },
+            {"role": "system", "content": systemInstructions},
             {
               "role": "user",
               "content": [
@@ -887,11 +871,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
               ]
             }
           ]
-        }));
+        };
 
-        if (analysisResponse.statusCode != 200) throw Exception(analysisResponse.body);
+        final analysisResponse = await Supabase.instance.client.functions.invoke(
+          'groq-api',
+          body: {'requestBody': analysisRequestBody},
+        );
 
-        final finalAiText = jsonDecode(analysisResponse.body)['choices'][0]['message']['content'];
+        if (analysisResponse.status != 200) throw Exception(analysisResponse.data);
+
+        final finalAiText = analysisResponse.data['choices'][0]['message']['content'];
         
         // --- UPDATED SPLIT LOGIC ---
         String displaySummary = finalAiText;
