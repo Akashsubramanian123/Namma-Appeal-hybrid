@@ -6,31 +6,41 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  // Handle CORS preflight request for Flutter Web
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    // Receive the data from your Flutter app
-    const { requestBody } = await req.json()
+    const { requestBody, targetApi } = await req.json()
     
-    // Securely grab the API key from the Supabase server environment
-    const GROQ_API_KEY = Deno.env.get('GROQ_API_KEY')
+    let url = 'https://api.groq.com/openai/v1/chat/completions'
+    let authHeader = `Bearer ${Deno.env.get('GROQ_API_KEY')}`
 
-    // Make the request to Groq from the server, NOT the browser
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    // Intercept if target is Gemini
+    if (targetApi === 'gemini') {
+      const geminiKeys = [
+        Deno.env.get('GEMINI_KEY_1'),
+        Deno.env.get('GEMINI_KEY_2'),
+        Deno.env.get('GEMINI_KEY_3'),
+        Deno.env.get('GEMINI_KEY_4')
+      ].filter(Boolean);
+      
+      const randomKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
+      // Route to standard Gemini Developer API endpoint
+      url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${randomKey}`
+      authHeader = '' 
+    }
+
+    const headers: Record<String, String> = { 'Content-Type': 'application/json' }
+    if (authHeader) headers['Authorization'] = authHeader
+
+    const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${GROQ_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: headers,
       body: JSON.stringify(requestBody),
     })
 
     const data = await response.json()
-
-    // Send the draft back to Flutter
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })

@@ -31,7 +31,6 @@ jobs:
           class Secrets {
             static const supabaseUrl = "${{ secrets.SUPABASE_URL }}";
             static const supabaseAnonKey = "${{ secrets.SUPABASE_ANON_KEY }}";
-            static const String groqApiKey = "${{ secrets.GROQ_API_KEY }}";
             static const openRouterKey = "${{ secrets.OPEN_ROUTER_KEY }}";
             static const String webClientId = "${{ secrets.WEB_CLIENT_ID }}";
             

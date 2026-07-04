@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'main.dart';
-import 'secrets.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:speech_to_text/speech_to_text.dart';
-import 'package:flutter/services.dart'; // Required for Haptics
+import 'package:flutter/services.dart';
+
 class ChatScreen extends StatefulWidget {
   final String? initialContext;
   final VoidCallback? onContextConsumed;
@@ -21,9 +19,6 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  late GenerativeModel _model;
-  late ChatSession _chatSession;
-
   // Each message: {"role": "user"|"model", "text": "...", "isStreaming": bool}
   List<Map<String, dynamic>> _messages = [];
   bool _isStreaming = false;
@@ -36,24 +31,17 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _speechEnabled = false;
   bool _isListening = false;
 
+  final String _systemInstruction = 
+      "You are Namma-Appeal AI, a specialized legal co-pilot designed to help Indian citizens navigate the Right to Information (RTI) Act, 2005. "
+      "Your primary job is to help users draft RTI applications, analyze government rejection letters, explain legal jargon, and empower citizens to fight bureaucratic delays. "
+      "You must NEVER refer to yourself as a generic language model or mention that you were trained by Google. "
+      "Always respond in the first person as Namma-Appeal AI. Maintain a professional, empathetic, and highly knowledgeable legal persona. "
+      "Always be concise, practical, and focused on Indian constitutional and civic rights.";
+
   @override
   void initState() {
     super.initState();
     _initSpeech();
-    
-    // INJECT THE SYSTEM INSTRUCTION HERE to give the AI its persona!
-    _model = GenerativeModel(
-      model: 'gemini-2.5-flash', 
-      apiKey: Secrets.geminiApiKey,
-      systemInstruction: Content.system(
-        "You are Namma-Appeal AI, a specialized legal co-pilot designed to help Indian citizens navigate the Right to Information (RTI) Act, 2005. "
-        "Your primary job is to help users draft RTI applications, analyze government rejection letters, explain legal jargon, and empower citizens to fight bureaucratic delays. "
-        "You must NEVER refer to yourself as a generic language model or mention that you were trained by Google. "
-        "Always respond in the first person as Namma-Appeal AI. Maintain a professional, empathetic, and highly knowledgeable legal persona. "
-        "Always be concise, practical, and focused on Indian constitutional and civic rights."
-      ),
-    );
-    
     _startNewChat();
     _fetchSessionsList();
   }
@@ -92,7 +80,6 @@ class _ChatScreenState extends State<ChatScreen> {
           "isStreaming": false,
         }
       ];
-      _chatSession = _model.startChat();
     });
 
     if (widget.initialContext != null && widget.initialContext!.isNotEmpty) {
@@ -129,17 +116,7 @@ class _ChatScreenState extends State<ChatScreen> {
           .eq('session_id', sessionId)
           .order('created_at', ascending: true);
 
-      // FIX 1: Explicitly cast the history mapping for Mobile AOT
-      List<Content> history = (data as List<dynamic>).map<Content>((msg) {
-        return msg['role'] == 'user'
-            ? Content.text(msg['message_text'].toString())
-            : Content.model([TextPart(msg['message_text'].toString())]);
-      }).toList();
-
       setState(() {
-        _chatSession = _model.startChat(history: history);
-        
-        // FIX 2: Force the list to be a flexible Map<String, dynamic> 
         _messages = List<Map<String, dynamic>>.from(
           data.map((msg) => <String, dynamic>{
             "role": msg['role'].toString(),
@@ -234,7 +211,6 @@ class _ChatScreenState extends State<ChatScreen> {
       _isStreaming = true;
     });
 
-    // Add placeholder for streaming AI response
     final int aiIndex = _messages.length;
     setState(() => _messages.add({"role": "model", "text": "", "isStreaming": true}));
     _scrollToBottom();
@@ -243,39 +219,47 @@ class _ChatScreenState extends State<ChatScreen> {
       await _ensureSessionExists("I have attached a document for context.");
       await _saveMessageToCloud("I have attached a document for context.", "user");
 
-      final prompt =
-          "The user has attached the following document/context from the app. Acknowledge that you have received it, briefly summarize what it is in one sentence, and ask how you can help them with it.\n\nDOCUMENT CONTEXT:\n$contextText";
+      final prompt = "The user has attached the following document/context from the app. Acknowledge that you have received it, briefly summarize what it is in one sentence, and ask how you can help them with it.\n\nDOCUMENT CONTEXT:\n$contextText";
 
-      final stream = _chatSession.sendMessageStream(Content.text(prompt));
-      final buffer = StringBuffer();
+      final formattedContents = [
+        {
+          "role": "user",
+          "parts": [{"text": prompt}]
+        }
+      ];
 
-      await for (final chunk in stream) {
-        if (!mounted) break;
-        buffer.write(chunk.text ?? '');
-        setState(() {
-          _messages[aiIndex] = {
-            "role": "model",
-            "text": '${buffer.toString()}▌',
-            "isStreaming": true,
-          };
-        });
-        _scrollToBottom();
-      }
+      final Map<String, dynamic> requestBody = {
+        "contents": formattedContents,
+        "systemInstruction": {
+          "parts": [{"text": _systemInstruction}]
+        }
+      };
 
-      final aiResponseText = buffer.toString();
+      final response = await Supabase.instance.client.functions.invoke(
+        'groq-api',
+        body: {
+          'targetApi': 'gemini',
+          'requestBody': requestBody
+        },
+      );
+
+      if (response.status != 200) throw Exception(response.data);
+
+      final aiText = response.data['candidates'][0]['content']['parts'][0]['text'].toString();
+
       setState(() {
         _messages[aiIndex] = {
           "role": "model",
-          "text": aiResponseText,
+          "text": aiText,
           "isStreaming": false,
         };
         _isStreaming = false;
       });
 
-      await _saveMessageToCloud(aiResponseText, "model");
+      await _saveMessageToCloud(aiText, "model");
     } catch (e) {
       setState(() {
-        _messages[aiIndex] = {"role": "model", "text": "Error: $e", "isStreaming": false};
+        _messages[aiIndex] = {"role": "model", "text": "Error communicating safely: $e", "isStreaming": false};
         _isStreaming = false;
       });
     } finally {
@@ -294,7 +278,7 @@ class _ChatScreenState extends State<ChatScreen> {
           const SnackBar(content: Text('No internet connection.'), backgroundColor: Colors.red));
       return;
     }
-    // Triggers a subtle, premium vibration
+    
     HapticFeedback.lightImpact();
     setState(() {
       _messages.add(<String, dynamic>{"role": "user", "text": text, "isStreaming": false});
@@ -311,23 +295,35 @@ class _ChatScreenState extends State<ChatScreen> {
       await _ensureSessionExists(text);
       await _saveMessageToCloud(text, 'user');
 
-      final stream = _chatSession.sendMessageStream(Content.text(text));
-      final buffer = StringBuffer();
+      // 1. Structure message history into standard Gemini formatting
+      final formattedContents = _messages.where((m) => m['text'].toString().isNotEmpty && m['role'] != null).map((m) {
+        return {
+          "role": m['role'] == 'user' ? 'user' : 'model',
+          "parts": [{"text": m['text'].toString()}]
+        };
+      }).toList();
 
-      await for (final chunk in stream) {
-        if (!mounted) break;
-        buffer.write(chunk.text ?? '');
-        setState(() {
-          _messages[aiIndex] = {
-            "role": "model",
-            "text": '${buffer.toString()}▌',
-            "isStreaming": true,
-          };
-        });
-        _scrollToBottom();
-      }
+      // 2. Wrap system persona and body instructions
+      final Map<String, dynamic> requestBody = {
+        "contents": formattedContents,
+        "systemInstruction": {
+          "parts": [{"text": _systemInstruction}]
+        }
+      };
 
-      final aiText = buffer.toString();
+      // 3. Connect safely via the Supabase proxy
+      final response = await Supabase.instance.client.functions.invoke(
+        'groq-api',
+        body: {
+          'targetApi': 'gemini',
+          'requestBody': requestBody
+        },
+      );
+
+      if (response.status != 200) throw Exception(response.data);
+
+      final aiText = response.data['candidates'][0]['content']['parts'][0]['text'].toString();
+
       setState(() {
         _messages[aiIndex] = {"role": "model", "text": aiText, "isStreaming": false};
         _isStreaming = false;
@@ -336,7 +332,7 @@ class _ChatScreenState extends State<ChatScreen> {
       await _saveMessageToCloud(aiText, 'model');
     } catch (e) {
       setState(() {
-        _messages[aiIndex] = {"role": "model", "text": "Error: $e", "isStreaming": false};
+        _messages[aiIndex] = {"role": "model", "text": "Error communicating safely: $e", "isStreaming": false};
         _isStreaming = false;
       });
     } finally {
