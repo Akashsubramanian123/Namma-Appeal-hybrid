@@ -48,6 +48,9 @@ dependencies:
   flutter_local_notifications: ^18.0.0
   timezone: ^0.9.4
   shimmer: ^3.0.0
+  google_fonts: ^8.2.0
+  fl_chart: ^1.2.0
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:

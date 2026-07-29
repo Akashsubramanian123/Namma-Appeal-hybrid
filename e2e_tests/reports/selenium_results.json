@@ -6,7 +6,7 @@
     "check_type": "UI/UX",
     "description": "Verify logo graphic display presence in DOM",
     "status": "PASSED",
-    "duration": 3.43
+    "duration": 3.44
   },
   {
     "id": "WEB-OB-02",
@@ -87,7 +87,7 @@
     "check_type": "UI/UX",
     "description": "Verify indicator dot transitions to index 2",
     "status": "PASSED",
-    "duration": 0.42
+    "duration": 0.43
   },
   {
     "id": "WEB-OB-11",
@@ -96,7 +96,7 @@
     "check_type": "UI/UX",
     "description": "Verify second slide text descriptions match web specs",
     "status": "PASSED",
-    "duration": 0.42
+    "duration": 0.41
   },
   {
     "id": "WEB-OB-12",
@@ -177,7 +177,7 @@
     "check_type": "UI/UX",
     "description": "Verify splash screen circular progress indicators",
     "status": "PASSED",
-    "duration": 0.4
+    "duration": 0.41
   },
   {
     "id": "WEB-AU-01",
@@ -249,7 +249,7 @@
     "check_type": "Button Check",
     "description": "Verify Forgot Password hyperlink triggers actions",
     "status": "PASSED",
-    "duration": 0.43
+    "duration": 0.41
   },
   {
     "id": "WEB-AU-09",
@@ -411,7 +411,7 @@
     "check_type": "Button Check",
     "description": "Verify tabs navigation matches Scanner",
     "status": "PASSED",
-    "duration": 0.41
+    "duration": 0.4
   },
   {
     "id": "WEB-NV-02",
@@ -789,7 +789,7 @@
     "check_type": "UI/UX",
     "description": "Verify headers user avatar icons load correctly",
     "status": "PASSED",
-    "duration": 0.41
+    "duration": 0.4
   },
   {
     "id": "WEB-PR-14",

@@ -1,7 +1,10 @@
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart';
 import 'legal_screen.dart';
+
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -14,7 +17,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _fullNameController = TextEditingController();
   final _addressController = TextEditingController();
   final _mobileController = TextEditingController();
-  final _stateController = TextEditingController();
+  final _pincodeController = TextEditingController();
+
+  bool _isVerifyingPin = false;
+  String _verifiedArea = "";
+
+  String? _selectedState;
+  final List<String> _indianStates = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+    'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+    'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+    'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
+    'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+    'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry'
+  ];
 
   String _selectedLanguage = 'English';
   final List<String> _languages = [
@@ -38,7 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fullNameController.dispose();
     _addressController.dispose();
     _mobileController.dispose();
-    _stateController.dispose();
+    _pincodeController.dispose();
     super.dispose();
   }
 
@@ -47,15 +64,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (profile != null && mounted) {
       setState(() {
         _fullNameController.text = profile['full_name'] ?? '';
-        _addressController.text = profile['address'] ?? '';
         _mobileController.text = profile['mobile_number'] ?? '';
-        _stateController.text = profile['state'] ?? '';
+        
+        final st = profile['state'] ?? 'Tamil Nadu';
+        _selectedState = _indianStates.contains(st) ? st : 'Tamil Nadu';
+
         final lang = profile['preferred_language'] ?? 'English';
         _selectedLanguage = _languages.contains(lang) ? lang : 'English';
+
+        // --- NEW ADDRESS PARSING LOGIC ---
+        String fullAddress = profile['address'] ?? '';
+        
+        // Check if the saved address contains our PIN format
+        if (fullAddress.contains('PIN:')) {
+          final parts = fullAddress.split('PIN:');
+          String beforePin = parts[0].trim(); 
+          _pincodeController.text = parts[1].trim(); 
+
+          // Remove the trailing comma from the string before the PIN
+          if (beforePin.endsWith(',')) {
+            beforePin = beforePin.substring(0, beforePin.length - 1).trim();
+          }
+
+          // Split the remaining string to separate the Door No and the District
+          int lastCommaIndex = beforePin.lastIndexOf(',');
+          if (lastCommaIndex != -1) {
+            _addressController.text = beforePin.substring(0, lastCommaIndex).trim();
+            _verifiedArea = beforePin.substring(lastCommaIndex + 1).trim();
+          } else {
+            _addressController.text = beforePin;
+          }
+        } else {
+          // Fallback for older profiles that don't have a PIN saved yet
+          _addressController.text = fullAddress;
+        }
+
         _isLoaded = true;
       });
     } else if (mounted) {
-      setState(() => _isLoaded = true);
+      setState(() {
+        _selectedState = 'Tamil Nadu';
+        _isLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _verifyPinCode(String pin) async {
+    setState(() => _isVerifyingPin = true);
+    try {
+      final response = await http.get(Uri.parse('https://api.postalpincode.in/pincode/$pin'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is List && data.isNotEmpty && data[0]['Status'] == 'Success') {
+          final postOffices = data[0]['PostOffice'] as List;
+          if (postOffices.isNotEmpty) {
+            final firstOffice = postOffices[0];
+            final stateName = firstOffice['State'];
+            final district = firstOffice['District'] ?? firstOffice['Name'] ?? '';
+            
+            setState(() {
+              if (_indianStates.contains(stateName)) {
+                _selectedState = stateName;
+              }
+              _verifiedArea = district;
+            });
+            return;
+          }
+        }
+      }
+      
+      setState(() {
+        _verifiedArea = "";
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Invalid PIN Code. Please enter a real Indian PIN code.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _verifiedArea = "";
+      });
+    } finally {
+      if (mounted) setState(() => _isVerifyingPin = false);
     }
   }
 
@@ -63,11 +157,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     try {
+      final combinedAddress = "${_addressController.text.trim()}, $_verifiedArea, PIN: ${_pincodeController.text.trim()}";
       await userProfileNotifier.saveProfile({
         'full_name': _fullNameController.text.trim(),
-        'address': _addressController.text.trim(),
+        'address': combinedAddress,
         'mobile_number': _mobileController.text.trim(),
-        'state': _stateController.text.trim(),
+        'state': _selectedState ?? 'Tamil Nadu',
         'preferred_language': _selectedLanguage,
       });
       if (mounted) {
@@ -151,7 +246,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
 
             const SizedBox(height: 8),
-            // Profile auto-fill info chip
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
@@ -184,20 +278,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 labelText: 'Full Name *',
                 prefixIcon: Icon(Icons.badge_outlined),
               ),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'Full name is required' : null,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'Full name is required';
+                if (v.trim().length < 3) return 'Please enter a valid full name';
+                return null;
+              },
             ),
             const SizedBox(height: 14),
 
             TextFormField(
               controller: _mobileController,
               decoration: const InputDecoration(
-                labelText: 'Mobile Number',
+                labelText: 'Mobile Number *',
                 prefixIcon: Icon(Icons.phone_outlined),
               ),
               keyboardType: TextInputType.phone,
               validator: (value) {
-                if (value != null && value.isNotEmpty && value.length != 10) {
-                  return 'Please enter a valid 10-digit mobile number';
+                if (value == null || value.trim().isEmpty) {
+                  return 'Mobile number is required';
+                }
+                final regExp = RegExp(r'^[6789]\d{9}$');
+                if (!regExp.hasMatch(value.trim())) {
+                  return 'Please enter a valid 10-digit Indian mobile number (starts with 6-9)';
                 }
                 return null;
               },
@@ -205,11 +307,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 14),
 
             TextFormField(
-              controller: _stateController,
+              controller: _pincodeController,
+              decoration: InputDecoration(
+                labelText: 'PIN Code *',
+                prefixIcon: const Icon(Icons.pin_drop_outlined),
+                suffixIcon: _isVerifyingPin 
+                  ? const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                    )
+                  : null,
+              ),
+              keyboardType: TextInputType.number,
+              maxLength: 6,
+              onChanged: (val) {
+                if (val.length == 6) {
+                  _verifyPinCode(val);
+                }
+              },
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return 'PIN Code is required';
+                if (v.trim().length != 6) return 'PIN Code must be 6 digits';
+                return null;
+              },
+            ),
+            if (_verifiedArea.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(left: 12, top: 4, bottom: 12),
+                child: Text(
+                  'Verified Area: $_verifiedArea',
+                  style: const TextStyle(color: Colors.green, fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+
+            DropdownButtonFormField<String>(
+              value: _selectedState,
+              isExpanded: true,
               decoration: const InputDecoration(
-                labelText: 'State',
+                labelText: 'State / Union Territory *',
                 prefixIcon: Icon(Icons.map_outlined),
               ),
+              items: _indianStates.map((stateName) {
+                return DropdownMenuItem(
+                  value: stateName,
+                  child: Text(stateName),
+                );
+              }).toList(),
+              onChanged: (newValue) => setState(() => _selectedState = newValue),
+              validator: (value) => (value == null || value.isEmpty) ? 'Please select a state' : null,
             ),
             const SizedBox(height: 14),
 
@@ -217,10 +362,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               controller: _addressController,
               maxLines: 3,
               decoration: const InputDecoration(
-                labelText: 'Address',
+                labelText: 'Door No., Building, Street Name *',
                 prefixIcon: Icon(Icons.home_outlined),
                 alignLabelWithHint: true,
               ),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return 'Address is required';
+                }
+                return null;
+              },
             ),
 
             const SizedBox(height: 24),
