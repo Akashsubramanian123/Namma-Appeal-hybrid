@@ -210,17 +210,17 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Execute Performance Load Simulation
+      - name: Execute Performance Load Simulation & Generate Reports
         run: |
-          mkdir -p e2e_tests/reports
-          echo "Load Test Simulation: 100 concurrent requests handled successfully within SLA limits." > e2e_tests/reports/load-test-reports.txt
+          cd e2e_tests
+          python generate_load_reports.py
 
       - name: Upload Load Test Artifact
         uses: actions/upload-artifact@v4
         with:
           name: load-test-reports
-          path: e2e_tests/reports/load-test-reports.txt
-
+          path: e2e_tests/reports/load_test/
+          
   # ==========================================
   # COLUMN 3: Deployments & E2E Executions
   # ==========================================
