@@ -46,7 +46,7 @@ class _PolisherScreenState extends State<PolisherScreen> {
         "messages": [
           {
             "role": "system",
-            "content": "You are a routing AI. Read the text and output exactly ONE WORD: 'LETTER' (if it looks like a drafted letter/application), 'QUESTION' (if it's asking for advice/how-to), or 'GRIEVANCE' (if it's a raw complaint, issue description, or prompt). Respond with NOTHING else."
+            "content": "You are a strict routing AI. Classify the user's text into exactly ONE WORD:\n1. 'LETTER': If it is a pre-written formal letter, application, or appeal body to be reviewed/polished.\n2. 'GRIEVANCE': If it is a description of an issue OR a command to write a document (e.g., 'Draft an RTI...', 'I want to file...', 'Write a letter...').\n3. 'QUESTION': ONLY if the user is asking YOU a conversational question or seeking legal advice (e.g., 'How do I...', 'What is the law...'). NEVER output 'QUESTION' if the user is telling you to draft a letter that asks questions to a third party.\nRespond with the single word only."
           },
           {"role": "user", "content": textInput}
         ],

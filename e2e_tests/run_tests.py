@@ -817,50 +817,74 @@ def generate_excel_report(appium_results, selenium_results, perf_results, securi
         
     ws_dash.row_dimensions[16].height = 24
     
+    # ----------------------------------------------------
+    # UPDATED: Python calculates values instead of Excel Formulas
+    # ----------------------------------------------------
     breakdown_sheets = [
-        ("Appium Android", "Appium Android", 17),
-        ("Selenium Web", "Selenium Web", 18),
-        ("Load & Performance", "Load & Performance", 19),
-        ("Vulnerability & RLS", "Vulnerability & RLS", 20)
+        ("Appium Android", appium_results, 17),
+        ("Selenium Web", selenium_results, 18),
+        ("Load & Performance", perf_results, 19),
+        ("Vulnerability & RLS", security_results, 20)
     ]
     
-    for name, sheet_title, r_idx in breakdown_sheets:
+    total_checks_all = 0
+    total_passed_all = 0
+    total_failed_all = 0
+    total_skipped_all = 0
+    total_avg_latency = 0.0
+    
+    for name, data_list, r_idx in breakdown_sheets:
         ws_dash.cell(row=r_idx, column=1, value=name).font = font_data_bold
         ws_dash.cell(row=r_idx, column=1).border = thin_border
         
+        # Calculate in Python
+        total = len(data_list)
+        passed = sum(1 for d in data_list if d["status"] == "PASSED")
+        failed = sum(1 for d in data_list if d["status"] == "FAILED")
+        skipped = sum(1 for d in data_list if d["status"] == "SKIPPED")
+        pass_rate = (passed / total) if total > 0 else 0
+        avg_lat = sum(d["duration"] for d in data_list) / total if total > 0 else 0
+        
+        # Accumulate totals
+        total_checks_all += total
+        total_passed_all += passed
+        total_failed_all += failed
+        total_skipped_all += skipped
+        total_avg_latency += avg_lat
+        
         # Total
-        c_tot = ws_dash.cell(row=r_idx, column=2, value=100)
+        c_tot = ws_dash.cell(row=r_idx, column=2, value=total)
         c_tot.font = font_data
         c_tot.alignment = align_center
         c_tot.border = thin_border
         
-        # Passed Formula
-        c_pass = ws_dash.cell(row=r_idx, column=3, value=f"=COUNTIF('{sheet_title}'!E:E, \"PASSED\")")
+        # Passed
+        c_pass = ws_dash.cell(row=r_idx, column=3, value=passed)
         c_pass.font = font_status_pass
         c_pass.alignment = align_center
         c_pass.border = thin_border
         
-        # Failed Formula
-        c_fail = ws_dash.cell(row=r_idx, column=4, value=f"=COUNTIF('{sheet_title}'!E:E, \"FAILED\")")
+        # Failed 
+        c_fail = ws_dash.cell(row=r_idx, column=4, value=failed)
         c_fail.font = font_data
         c_fail.alignment = align_center
         c_fail.border = thin_border
         
-        # Skipped Formula
-        c_skip = ws_dash.cell(row=r_idx, column=5, value=f"=COUNTIF('{sheet_title}'!E:E, \"SKIPPED\")")
+        # Skipped 
+        c_skip = ws_dash.cell(row=r_idx, column=5, value=skipped)
         c_skip.font = font_data
         c_skip.alignment = align_center
         c_skip.border = thin_border
         
-        # Pass Rate Formula
-        c_rate = ws_dash.cell(row=r_idx, column=6, value=f"=C{r_idx}/B{r_idx}")
+        # Pass Rate 
+        c_rate = ws_dash.cell(row=r_idx, column=6, value=pass_rate)
         c_rate.font = font_data_bold
         c_rate.alignment = align_right
         c_rate.number_format = "0.0%"
         c_rate.border = thin_border
         
-        # Avg Latency Formula
-        c_lat = ws_dash.cell(row=r_idx, column=7, value=f"=AVERAGE('{sheet_title}'!F:F)")
+        # Avg Latency 
+        c_lat = ws_dash.cell(row=r_idx, column=7, value=avg_lat)
         c_lat.font = font_data
         c_lat.alignment = align_right
         c_lat.number_format = "0.00"
@@ -868,38 +892,40 @@ def generate_excel_report(appium_results, selenium_results, perf_results, securi
         
         ws_dash.row_dimensions[r_idx].height = 20
         
-    # Summary Row
+    # ── Summary Row (Calculated by Python) ──
     ws_dash.cell(row=21, column=1, value="TOTAL SUMMARY").font = font_data_bold
     ws_dash.cell(row=21, column=1).fill = gray_header_fill
     ws_dash.cell(row=21, column=1).border = thin_border
     
-    ws_dash.cell(row=21, column=2, value="=SUM(B17:B20)").font = font_data_bold
+    ws_dash.cell(row=21, column=2, value=total_checks_all).font = font_data_bold
     ws_dash.cell(row=21, column=2).alignment = align_center
     ws_dash.cell(row=21, column=2).fill = gray_header_fill
     ws_dash.cell(row=21, column=2).border = thin_border
     
-    ws_dash.cell(row=21, column=3, value="=SUM(C17:C20)").font = font_status_pass
+    ws_dash.cell(row=21, column=3, value=total_passed_all).font = font_status_pass
     ws_dash.cell(row=21, column=3).alignment = align_center
     ws_dash.cell(row=21, column=3).fill = gray_header_fill
     ws_dash.cell(row=21, column=3).border = thin_border
     
-    ws_dash.cell(row=21, column=4, value="=SUM(D17:D20)").font = font_data_bold
+    ws_dash.cell(row=21, column=4, value=total_failed_all).font = font_data_bold
     ws_dash.cell(row=21, column=4).alignment = align_center
     ws_dash.cell(row=21, column=4).fill = gray_header_fill
     ws_dash.cell(row=21, column=4).border = thin_border
     
-    ws_dash.cell(row=21, column=5, value="=SUM(E17:E20)").font = font_data_bold
+    ws_dash.cell(row=21, column=5, value=total_skipped_all).font = font_data_bold
     ws_dash.cell(row=21, column=5).alignment = align_center
     ws_dash.cell(row=21, column=5).fill = gray_header_fill
     ws_dash.cell(row=21, column=5).border = thin_border
     
-    ws_dash.cell(row=21, column=6, value="=C21/B21").font = font_data_bold
+    overall_rate = (total_passed_all / total_checks_all) if total_checks_all > 0 else 0
+    ws_dash.cell(row=21, column=6, value=overall_rate).font = font_data_bold
     ws_dash.cell(row=21, column=6).alignment = align_right
     ws_dash.cell(row=21, column=6).number_format = "0.0%"
     ws_dash.cell(row=21, column=6).fill = gray_header_fill
     ws_dash.cell(row=21, column=6).border = thin_border
     
-    ws_dash.cell(row=21, column=7, value="=AVERAGE(G17:G20)").font = font_data_bold
+    avg_of_avgs = total_avg_latency / 4
+    ws_dash.cell(row=21, column=7, value=avg_of_avgs).font = font_data_bold
     ws_dash.cell(row=21, column=7).alignment = align_right
     ws_dash.cell(row=21, column=7).number_format = "0.00"
     ws_dash.cell(row=21, column=7).fill = gray_header_fill

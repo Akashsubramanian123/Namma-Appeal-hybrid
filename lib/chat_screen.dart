@@ -14,8 +14,9 @@ const kRejectedRed = Color(0xFFEF4444);
 class ChatScreen extends StatefulWidget {
   final String? initialContext;
   final VoidCallback? onContextConsumed;
+  final Function(int, [String?, String?])? onNavigate;
 
-  const ChatScreen({super.key, this.initialContext, this.onContextConsumed});
+  const ChatScreen({super.key, this.initialContext, this.onContextConsumed, this.onNavigate});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -38,7 +39,15 @@ class _ChatScreenState extends State<ChatScreen> {
   final String _systemInstruction = 
       "You are Namma-Appeal AI, a specialized legal co-pilot designed to help Indian citizens navigate the Right to Information (RTI) Act, 2005. "
       "Always respond in the first person as Namma-Appeal AI. Maintain a professional, empathetic, and highly knowledgeable legal persona. "
-      "Always be concise, practical, and focused on Indian constitutional and civic rights.";
+      "You are fully integrated into the Namma-Appeal app and must act as a guide to its features. The app has the following screens:\n"
+      "- 'Draft New RTI': Generates fresh RTI applications from scratch.\n"
+      "- 'Template Library': Provides pre-built RTI formats for common issues.\n"
+      "- 'AI Document Polisher': Reviews and formalizes rough letters written by the user.\n"
+      "- 'Rejection Scanner': Analyzes rejected RTI orders and drafts First Appeals using the camera.\n"
+      "- 'History & Tracking': Shows past drafts and allows the user to set active deadline reminders.\n\n"
+      "If the user's request is best solved by using one of these tools, explain why and explicitly suggest they use it. "
+      "CRITICAL: To display a clickable navigation button in the chat, you MUST include this exact syntax on a new line in your response: [NAVIGATE_BTN: <Screen Name>]. "
+      "For example: [NAVIGATE_BTN: Rejection Scanner] or [NAVIGATE_BTN: Draft New RTI].";
 
   @override
   void initState() {
@@ -162,7 +171,25 @@ class _ChatScreenState extends State<ChatScreen> {
       final Map<String, dynamic> requestBody = {"contents": formattedContents, "systemInstruction": {"parts": [{"text": _systemInstruction}]}};
       final response = await Supabase.instance.client.functions.invoke('groq-api', body: {'targetApi': 'gemini', 'requestBody': requestBody});
       if (response.status != 200) throw Exception(response.data);
-      final aiText = response.data['candidates'][0]['content']['parts'][0]['text'].toString();
+      // ── BULLETPROOF API PARSING ──
+      final data = response.data;
+      String aiText = "";
+
+      if (data == null) {
+        throw Exception("API returned an empty response.");
+      } else if (data is Map && data.containsKey('candidates') && data['candidates'] != null && (data['candidates'] as List).isNotEmpty) {
+        // Handle Gemini Format
+        aiText = data['candidates'][0]['content']['parts'][0]['text'].toString();
+      } else if (data is Map && data.containsKey('choices') && data['choices'] != null && (data['choices'] as List).isNotEmpty) {
+        // Handle Groq / Llama Format Fallback
+        aiText = data['choices'][0]['message']['content'].toString();
+      } else if (data is Map && data.containsKey('error')) {
+        // Handle API explicitly returning an error inside a 200 OK
+        throw Exception(data['error'].toString());
+      } else {
+        // Catch-all for unexpected JSON structures
+        throw Exception("Unexpected API response structure: $data");
+      }
       setState(() { _messages[aiIndex] = {"role": "model", "text": aiText, "isStreaming": false}; _isStreaming = false; });
       await _saveMessageToCloud(aiText, "model");
     } catch (e) {
@@ -200,7 +227,25 @@ class _ChatScreenState extends State<ChatScreen> {
       final Map<String, dynamic> requestBody = {"contents": formattedContents, "systemInstruction": {"parts": [{"text": _systemInstruction}]}};
       final response = await Supabase.instance.client.functions.invoke('groq-api', body: {'targetApi': 'gemini', 'requestBody': requestBody});
       if (response.status != 200) throw Exception(response.data);
-      final aiText = response.data['candidates'][0]['content']['parts'][0]['text'].toString();
+      // ── BULLETPROOF API PARSING ──
+      final data = response.data;
+      String aiText = "";
+
+      if (data == null) {
+        throw Exception("API returned an empty response.");
+      } else if (data is Map && data.containsKey('candidates') && data['candidates'] != null && (data['candidates'] as List).isNotEmpty) {
+        // Handle Gemini Format
+        aiText = data['candidates'][0]['content']['parts'][0]['text'].toString();
+      } else if (data is Map && data.containsKey('choices') && data['choices'] != null && (data['choices'] as List).isNotEmpty) {
+        // Handle Groq / Llama Format Fallback
+        aiText = data['choices'][0]['message']['content'].toString();
+      } else if (data is Map && data.containsKey('error')) {
+        // Handle API explicitly returning an error inside a 200 OK
+        throw Exception(data['error'].toString());
+      } else {
+        // Catch-all for unexpected JSON structures
+        throw Exception("Unexpected API response structure: $data");
+      }
       setState(() { _messages[aiIndex] = {"role": "model", "text": aiText, "isStreaming": false}; _isStreaming = false; });
       await _saveMessageToCloud(aiText, 'model');
     } catch (e) {
@@ -355,13 +400,68 @@ class _ChatScreenState extends State<ChatScreen> {
                         else BoxShadow(color: kTextSlate.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
                       ],
                     ),
-                    child: MarkdownBody(
-                      data: text,
-                      selectable: !isUser,
-                      styleSheet: MarkdownStyleSheet(
-                        p: TextStyle(color: isUser ? Colors.white : kTextSlate, fontSize: 15, height: 1.5),
-                        strong: TextStyle(color: isUser ? Colors.white : kTextSlate, fontWeight: FontWeight.bold, fontSize: 15),
-                      ),
+                    // ── INTERCEPTOR BUILDER ──
+                    child: Builder(
+                      builder: (context) {
+                        final RegExp navRegex = RegExp(r'\[NAVIGATE_BTN:\s*(.+?)\]');
+                        final Iterable<RegExpMatch> matches = navRegex.allMatches(text);
+                        
+                        List<String> buttonsToRender = [];
+                        for (final match in matches) {
+                           buttonsToRender.add(match.group(1)!.trim());
+                        }
+                        
+                        String cleanText = text.replaceAll(navRegex, '').trim();
+
+                        return Column(
+                          mainAxisSize: MainAxisSize.min, // ── FIXES ALIGNMENT ERROR ──
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (cleanText.isNotEmpty)
+                              MarkdownBody(
+                                data: cleanText,
+                                selectable: !isUser,
+                                styleSheet: MarkdownStyleSheet(
+                                  p: TextStyle(color: isUser ? Colors.white : kTextSlate, fontSize: 15, height: 1.5),
+                                  strong: TextStyle(color: isUser ? Colors.white : kTextSlate, fontWeight: FontWeight.bold, fontSize: 15),
+                                ),
+                              ),
+                            
+                            if (buttonsToRender.isNotEmpty && !isUser) ...[
+                              const SizedBox(height: 12),
+                              ...buttonsToRender.map((btnName) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(top: 8.0),
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: kRoyalBlue,
+                                      elevation: 0,
+                                      side: const BorderSide(color: kRoyalBlue, width: 1.5),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                    onPressed: () {
+                                      int targetIndex = -1;
+                                      final lowerName = btnName.toLowerCase();
+                                      if (lowerName.contains('draft') || lowerName.contains('new')) targetIndex = 1;
+                                      else if (lowerName.contains('template')) targetIndex = 2;
+                                      else if (lowerName.contains('polish')) targetIndex = 3;
+                                      else if (lowerName.contains('scan') || lowerName.contains('reject')) targetIndex = 4;
+                                      else if (lowerName.contains('history') || lowerName.contains('track')) targetIndex = 5;
+                                      
+                                      if (targetIndex != -1 && widget.onNavigate != null) {
+                                        widget.onNavigate!(targetIndex);
+                                      }
+                                    },
+                                    icon: const Icon(Icons.touch_app, size: 18),
+                                    label: Text("Go to $btnName"),
+                                  ),
+                                );
+                              }),
+                            ]
+                          ],
+                        );
+                      }
                     ),
                   ),
                 );

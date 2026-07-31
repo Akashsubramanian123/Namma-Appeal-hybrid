@@ -372,7 +372,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       PolisherScreen(onChatTriggered: _jumpToChatWithContext, onNavigate: _navigateToIndex, initialText: _prefilledTemplate), 
       ScannerScreen(onChatTriggered: _jumpToChatWithContext),
       HistoryScreen(onChatTriggered: _jumpToChatWithContext, initialFilter: _historyFilter, searchQuery: _searchQuery), 
-      ChatScreen(initialContext: _pendingChatContext, onContextConsumed: () => setState(() => _pendingChatContext = null)), 
+      ChatScreen(
+        initialContext: _pendingChatContext, 
+        onContextConsumed: () => setState(() => _pendingChatContext = null),
+        onNavigate: _navigateToIndex, // ── PASS THE NAVIGATOR ──
+      ), 
       const ProfileScreen(),                                 
     ];
 
@@ -753,7 +757,7 @@ class _NewRtiScreenState extends State<NewRtiScreen> {
           "messages": [
             {
               "role": "system", 
-              "content": "You are a routing AI. Read the text and output exactly ONE WORD: 'LETTER' (if it is ALREADY a fully drafted formal letter with To/From addresses), 'QUESTION' (if it asks for legal advice), or 'GRIEVANCE' (if it describes an issue or asks you to draft an RTI). Respond with NOTHING else."
+              "content": "You are a strict routing AI. Classify the user's text into exactly ONE WORD:\n1. 'LETTER': If it is a pre-written formal letter, application, or appeal body to be reviewed/polished.\n2. 'GRIEVANCE': If it is a description of an issue OR a command to write a document (e.g., 'Draft an RTI...', 'I want to file...', 'Write a letter...').\n3. 'QUESTION': ONLY if the user is asking YOU a conversational question or seeking legal advice (e.g., 'How do I...', 'What is the law...'). NEVER output 'QUESTION' if the user is telling you to draft a letter that asks questions to a third party.\nRespond with the single word only."
             },
             {"role": "user", "content": textInput}
           ],
